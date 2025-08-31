@@ -1,39 +1,33 @@
-#include "main.h"
+#include <stdio.h>
 
 /**
- * main - prints numbers from 1 to 100 with FizzBuzz logic
+ * main - prints the numbers from 1 to 100,
+ *        but replaces multiples of 3 with Fizz,
+ *        multiples of 5 with Buzz,
+ *        and multiples of both with FizzBuzz.
  *
  * Return: Always 0
  */
 int main(void)
 {
-    int i;
+	int i;
 
-    for (i = 1; i <= 100; i++)
-    {
-        if (i % 3 == 0 && i % 5 == 0)
-        {
-            _putchar('F'); _putchar('i'); _putchar('z'); _putchar('z');
-            _putchar('B'); _putchar('u'); _putchar('z'); _putchar('z');
-        }
-        else if (i % 3 == 0)
-        {
-            _putchar('F'); _putchar('i'); _putchar('z'); _putchar('z');
-        }
-        else if (i % 5 == 0)
-        {
-            _putchar('B'); _putchar('u'); _putchar('z'); _putchar('z');
-        }
-        else
-        {
-            print_number(i);
-        }
+	for (i = 1; i <= 100; i++)
+	{
+		if (i % 3 == 0 && i % 5 == 0)
+			printf("FizzBuzz");
+		else if (i % 3 == 0)
+			printf("Fizz");
+		else if (i % 5 == 0)
+			printf("Buzz");
+		else
+			printf("%d", i);
 
-        if (i < 100)
-            _putchar(' ');
-    }
-    _putchar('\n');
+		if (i < 100)
+			printf(" ");
+	}
+	printf("\n");
 
-    return (0);
+	return (0);
 }
 
