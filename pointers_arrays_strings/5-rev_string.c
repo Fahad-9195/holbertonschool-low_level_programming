@@ -1,4 +1,5 @@
 #include "main.h"
+
 /**
  * rev_string - reverses a string
  * @s: pointer to the string
@@ -10,15 +11,21 @@ void rev_string(char *s)
 	int start = 0;
 	int end = 0;
 	char temp;
+
+	/* calculate length */
 	while (s[end] != '\0')
 		end++;
-	end = end - 1;
+
+	end = end - 1; /* last index */
+
 	while (start < end)
 	{
 		temp = s[start];
 		s[start] = s[end];
 		s[end] = temp;
+
 		start++;
 		end--;
 	}
 }
+
