@@ -1,20 +1,16 @@
 #include "main.h"
+
 /**
- * _puts - prints a string, followed by a new line, to stdout
- * @str: pointer to the string
+ * main - check the code
  *
- * This function prints the characters of a string one by one
- * using the _putchar function, then prints a newline.
- *
- * Return: nothing (void)
+ * Return: Always 0.
  */
-void _puts(char *str)
+int main(void)
 {
-int i = 0;
-while (str[i] != '\0')
-{
-_putchar(str[i]);
-i++;
+    char *str;
+
+    str = "Holberton School!";
+    _puts(str);
+    return (0);
 }
-_putchar('\n');
-}
+
