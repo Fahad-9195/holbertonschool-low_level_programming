@@ -7,18 +7,18 @@
  */
 int main(void)
 {
-	long long n = 612852475143LL;
-	long long largest = 1;
-	long long f = 2;
+	unsigned long n = 612852475143UL;
+	unsigned long largest = 1;
+	unsigned long f;
 
-	/* اقسم على 2 قدر الإمكان */
-	while (n % f == 0)
+	/* remove factors of 2 */
+	while (n % 2 == 0)
 	{
-		largest = f;
-		n /= f;
+		largest = 2;
+		n /= 2;
 	}
 
-	/* جرّب العوامل الفردية من 3 وصاعداً */
+	/* test odd factors */
 	f = 3;
 	while (f * f <= n)
 	{
@@ -30,10 +30,11 @@ int main(void)
 		f += 2;
 	}
 
-	/* إن تبقى n > 1 فهو عامل أولي أكبر من الجذر */
+	/* if remainder > 1, it's a prime factor (and the largest) */
 	if (n > 1)
 		largest = n;
 
-	printf("%lld\n", largest);
+	printf("%lu\n", largest);
 	return (0);
 }
+
