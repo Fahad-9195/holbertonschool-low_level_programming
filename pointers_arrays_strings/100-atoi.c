@@ -13,32 +13,22 @@ int _atoi(char *s)
 	int result = 0;
 	int found_digit = 0;
 
-	/* حساب الإشارة */
-	while (s[i] != '\0' && !(s[i] >= '0' && s[i] <= '9'))
+	while (s[i] != '\0')
 	{
 		if (s[i] == '-')
 			sign *= -1;
 		else if (s[i] == '+')
-			;
-		i++;
-	}
-
-	/* بناء الرقم مع الإشارة من البداية */
-	while (s[i] >= '0' && s[i] <= '9')
-	{
-		found_digit = 1;
-
-		if (sign > 0)
+			; /* ignore */
+		else if (s[i] >= '0' && s[i] <= '9')
+		{
+			found_digit = 1;
 			result = result * 10 + (s[i] - '0');
-		else
-			result = result * 10 - (s[i] - '0');
-
+		}
+		else if (found_digit)
+			break;
 		i++;
 	}
 
-	if (!found_digit)
-		return (0);
-
-	return (result);
+	return (sign * result);
 }
 
