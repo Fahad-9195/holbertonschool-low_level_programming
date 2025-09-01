@@ -1,16 +1,20 @@
 #include "main.h"
 
 /**
- * main - check the code
+ * _puts - prints a string, followed by a new line, to stdout
+ * @str: pointer to the string
  *
- * Return: Always 0.
+ * Return: nothing (void)
  */
-int main(void)
+void _puts(char *str)
 {
-    char *str;
+    int i = 0;
 
-    str = "Holberton School!";
-    _puts(str);
-    return (0);
+    while (str[i] != '\0')
+    {
+        _putchar(str[i]);
+        i++;
+    }
+    _putchar('\n');
 }
 
