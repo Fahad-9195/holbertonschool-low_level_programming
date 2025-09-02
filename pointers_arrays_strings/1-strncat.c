@@ -13,11 +13,11 @@ int s = 0;
 while (dest[d] != '\0')
 d++;
 }
-while (d < s && src[s] != '\0')
+while (s < n && src[s] != '\0')
 {
 dest[d] = scr[s];
 d++;
 s++;
 }
-dest[d] =('\0');
+dest[d] ='\0';
 return (dest);
