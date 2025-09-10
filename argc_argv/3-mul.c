@@ -8,6 +8,7 @@
  * Return: 0 on success, 1 if wrong number of arguments.
  */
 int main(int argc, char *argv[])
+
 {
 int a, b, product;
 if (argc != 3)
