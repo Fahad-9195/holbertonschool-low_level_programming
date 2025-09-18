@@ -1,7 +1,12 @@
 #include <stdlib.h>
 #include "dog.h"
 
-/* local helpers (لا تُحتسب ضمن طول new_dog) */
+/**
+ * _strlen_local - returns the length of a string
+ * @s: input string
+ *
+ * Return: length of s; 0 if s is NULL
+ */
 static int _strlen_local(const char *s)
 {
 	int len = 0;
@@ -13,6 +18,12 @@ static int _strlen_local(const char *s)
 	return (len);
 }
 
+/**
+ * _strdup_local - duplicates a string using malloc
+ * @s: input string to duplicate
+ *
+ * Return: pointer to newly allocated duplicate; NULL on failure
+ */
 static char *_strdup_local(const char *s)
 {
 	char *p;
@@ -34,7 +45,7 @@ static char *_strdup_local(const char *s)
  * @age: dog's age
  * @owner: dog's owner (copied)
  *
- * Return: pointer to new dog_t, or NULL on failure
+ * Return: pointer to new dog_t; NULL on failure
  */
 dog_t *new_dog(char *name, float age, char *owner)
 {
