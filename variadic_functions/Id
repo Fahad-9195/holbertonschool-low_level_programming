@@ -1,0 +1,3 @@
+nasm -f elf64 100-hello_world.asm -o 100-hello_world.o
+ld -s -o hello 100-hello_world.o
+./hello
