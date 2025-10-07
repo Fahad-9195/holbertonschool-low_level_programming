@@ -9,18 +9,18 @@
  */
 size_t print_list(const list_t *h)
 {
-    size_t count = 0; /* عدد العقد */
+	size_t count = 0; /* عدد العقد */
 
-    while (h != NULL)
-    {
-        if (h->str == NULL)
-            printf("[0] (nil)\n");
-        else
-            printf("[%u] %s\n", h->len, h->str);
+	while (h != NULL)
+	{
+		if (h->str == NULL)
+			printf("[0] (nil)\n");
+		else
+			printf("[%u] %s\n", h->len, h->str);
 
-        h = h->next;
-        count++; /* زيادة العداد لكل عقدة */
-    }
+		h = h->next;
+		count++; /* زيادة العداد لكل عقدة */
+	}
 
-    return (count); /* إرجاع عدد العقد */
+	return (count); /* إرجاع عدد العقد */
 }
