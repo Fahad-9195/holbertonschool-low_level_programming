@@ -14,7 +14,10 @@
  */
 static uint16_t bswap16(uint16_t x)
 {
-	return (uint16_t)((x << 8) | (x >> 8));
+	uint16_t v;
+
+	v = (uint16_t)((x << 8) | (x >> 8));
+	return (v);
 }
 
 /**
@@ -24,10 +27,13 @@ static uint16_t bswap16(uint16_t x)
  */
 static uint32_t bswap32(uint32_t x)
 {
-	return ((x & 0x000000FFU) << 24) |
-	       ((x & 0x0000FF00U) << 8) |
-	       ((x & 0x00FF0000U) >> 8) |
-	       ((x & 0xFF000000U) >> 24);
+	uint32_t v;
+
+	v = ((x & 0x000000FFU) << 24) |
+	    ((x & 0x0000FF00U) << 8) |
+	    ((x & 0x00FF0000U) >> 8) |
+	    ((x & 0xFF000000U) >> 24);
+	return (v);
 }
 
 /**
@@ -37,8 +43,11 @@ static uint32_t bswap32(uint32_t x)
  */
 static uint64_t bswap64(uint64_t x)
 {
-	return ((uint64_t)bswap32((uint32_t)x) << 32) |
-	       (uint64_t)bswap32((uint32_t)(x >> 32));
+	uint64_t v;
+
+	v = ((uint64_t)bswap32((uint32_t)x) << 32) |
+	    (uint64_t)bswap32((uint32_t)(x >> 32));
+	return (v);
 }
 
 /**
@@ -94,13 +103,14 @@ static const char *osabi_known_str(unsigned char o)
 }
 
 /**
- * print_type - print the ELF file type line like readelf
+ * print_type_line - print the ELF file Type like readelf
  * @t: e_type (host-endian)
  */
-static void print_type(uint16_t t)
+static void print_type_line(uint16_t t)
 {
-	const char *s = NULL;
+	const char *s;
 
+	s = NULL;
 	switch (t)
 	{
 	case ET_NONE: s = "NONE (No file type)"; break;
@@ -108,43 +118,41 @@ static void print_type(uint16_t t)
 	case ET_EXEC: s = "EXEC (Executable file)"; break;
 	case ET_DYN:  s = "DYN (Shared object file)"; break;
 	case ET_CORE: s = "CORE (Core file)"; break;
-	default:
-		if (t >= ET_LOOS && t <= ET_HIOS)
-		{
-			printf("  Type:                              ");
-			printf("OS Specific: (0x%x)\n", t);
-		}
-		else if (t >= ET_LOPROC)
-		{
-			printf("  Type:                              ");
-			printf("Processor Specific: (0x%x)\n", t);
-		}
-		else
-		{
-			printf("  Type:                              ");
-			printf("UNKNOWN (0x%x)\n", t);
-		}
+	default: s = NULL; break;
+	}
+
+	if (s != NULL)
+	{
+		printf("  Type:                              %s\n", s);
 		return;
 	}
 
-	printf("  Type:                              %s\n", s);
+	if (t >= ET_LOOS && t <= ET_HIOS)
+	{
+		printf("  Type:                              ");
+		printf("OS Specific: (0x%x)\n", t);
+	}
+	else if (t >= ET_LOPROC)
+	{
+		printf("  Type:                              ");
+		printf("Processor Specific: (0x%x)\n", t);
+	}
+	else
+	{
+		printf("  Type:                              ");
+		printf("UNKNOWN (0x%x)\n", t);
+	}
 }
 
 /**
- * print_header - print header fields as readelf -h
+ * print_magic - print the Magic bytes
  * @ei: pointer to e_ident
- * @is64: 1 if ELFCLASS64, else 0
- * @is_msb: 1 if big-endian file, else 0
- * @hdr_buf: buffer holding the header bytes
  */
-static void print_header(unsigned char *ei, int is64, int is_msb,
-			 void *hdr_buf)
+static void print_magic(const unsigned char *ei)
 {
 	int i;
 
 	printf("ELF Header:\n");
-
-	/* Magic */
 	printf("  Magic:   ");
 	for (i = 0; i < EI_NIDENT; i++)
 	{
@@ -153,62 +161,98 @@ static void print_header(unsigned char *ei, int is64, int is_msb,
 			printf(" ");
 	}
 	printf("\n");
+}
 
-	/* Class, Data, Version, OS/ABI, ABI Version */
+/**
+ * print_ident - print Class/Data/Version/OSABI/ABIVersion lines
+ * @ei: pointer to e_ident
+ */
+static void print_ident(const unsigned char *ei)
+{
+	const char *osabi;
+
 	printf("  Class:                             %s\n",
 	       class_str(ei[EI_CLASS]));
 	printf("  Data:                              %s\n",
 	       data_str(ei[EI_DATA]));
-
 	if (ei[EI_VERSION] == EV_CURRENT)
 		printf("  Version:                           1 (current)\n");
 	else
 		printf("  Version:                           %d\n",
 		       ei[EI_VERSION]);
 
-	{
-		const char *osabi = osabi_known_str(ei[EI_OSABI]);
-
-		printf("  OS/ABI:                            ");
-		if (osabi)
-			printf("%s\n", osabi);
-		else
-			printf("<unknown: %x>\n", ei[EI_OSABI]);
-	}
+	osabi = osabi_known_str(ei[EI_OSABI]);
+	printf("  OS/ABI:                            ");
+	if (osabi)
+		printf("%s\n", osabi);
+	else
+		printf("<unknown: %x>\n", ei[EI_OSABI]);
 
 	printf("  ABI Version:                       %d\n",
 	       ei[EI_ABIVERSION]);
+}
 
-	/* Type + Entry (handle endianness) */
+/**
+ * print_type_and_entry - print Type and Entry lines
+ * @ei: pointer to e_ident
+ * @is64: 1 if ELFCLASS64, else 0
+ * @is_msb: 1 if big-endian file, else 0
+ * @hdr_buf: buffer holding the header bytes
+ */
+static void print_type_and_entry(unsigned char *ei, int is64, int is_msb,
+				 void *hdr_buf)
+{
 	if (is64)
 	{
-		Elf64_Ehdr *h = (Elf64_Ehdr *)hdr_buf;
-		uint16_t type = h->e_type;
-		uint64_t entry = h->e_entry;
+		Elf64_Ehdr *h;
+		uint16_t type;
+		uint64_t entry;
 
+		h = (Elf64_Ehdr *)hdr_buf;
+		type = h->e_type;
+		entry = h->e_entry;
 		if (is_msb)
 		{
 			type = bswap16(type);
 			entry = bswap64(entry);
 		}
-		print_type(type);
+		print_type_line(type);
 		printf("  Entry point address:               0x%lx\n",
 		       (unsigned long)entry);
 	}
 	else
 	{
-		Elf32_Ehdr *h2 = (Elf32_Ehdr *)hdr_buf;
-		uint16_t type2 = h2->e_type;
-		uint32_t entry2 = h2->e_entry;
+		Elf32_Ehdr *h2;
+		uint16_t type2;
+		uint32_t entry2;
 
+		h2 = (Elf32_Ehdr *)hdr_buf;
+		type2 = h2->e_type;
+		entry2 = h2->e_entry;
 		if (is_msb)
 		{
 			type2 = bswap16(type2);
 			entry2 = bswap32(entry2);
 		}
-		print_type(type2);
-		printf("  Entry point address:               0x%x\n", entry2);
+		print_type_line(type2);
+		printf("  Entry point address:               0x%x\n",
+		       entry2);
 	}
+}
+
+/**
+ * print_header - orchestrate printing of the ELF header fields
+ * @ei: pointer to e_ident
+ * @is64: 1 if ELFCLASS64, else 0
+ * @is_msb: 1 if big-endian file, else 0
+ * @hdr_buf: buffer holding the header bytes
+ */
+static void print_header(unsigned char *ei, int is64, int is_msb,
+			 void *hdr_buf)
+{
+	print_magic(ei);
+	print_ident(ei);
+	print_type_and_entry(ei, is64, is_msb, hdr_buf);
 }
 
 /**
@@ -216,9 +260,6 @@ static void print_header(unsigned char *ei, int is64, int is_msb,
  * @argc: argument count
  * @argv: argument vector (argv[1] = elf filename)
  * Return: 0 on success, 98 on any error
- *
- * Description: On any error (usage, open, read, not ELF, close) prints an
- * explanatory message to stderr and exits with status 98.
  */
 int main(int argc, char **argv)
 {
@@ -226,7 +267,8 @@ int main(int argc, char **argv)
 	ssize_t r;
 	unsigned char buf[HDR_MAX];
 	unsigned char *ei;
-	int is64, is_msb;
+	int is64;
+	int is_msb;
 
 	if (argc != 2)
 	{
