@@ -11,7 +11,7 @@ static char *create_buffer(const char *file_to)
 {
 	char *buf = malloc(BUFSIZE);
 
-	if (!buf)
+	if (buf == NULL)
 	{
 		dprintf(STDERR_FILENO, "Error: Can't write to %s\n", file_to);
 		exit(99);
@@ -28,10 +28,45 @@ static void close_fd(int fd)
 	}
 }
 
+static void write_chunk(int fd_to, char *buf, ssize_t r, const char *file_to)
+{
+	ssize_t total = 0, w;
+
+	while (total < r)
+	{
+		w = write(fd_to, buf + total, r - total);
+		if (w == -1)
+		{
+			dprintf(STDERR_FILENO, "Error: Can't write to %s\n", file_to);
+			exit(99);
+		}
+		total += w;
+	}
+}
+
+static void copy_rest(int fd_from, int fd_to, char *buf,
+		      const char *file_from, const char *file_to)
+{
+	ssize_t r;
+
+	r = read(fd_from, buf, BUFSIZE);
+	while (r > 0)
+	{
+		write_chunk(fd_to, buf, r, file_to);
+		r = read(fd_from, buf, BUFSIZE);
+	}
+	if (r == -1)
+	{
+		dprintf(STDERR_FILENO, "Error: Can't read from file %s\n",
+			file_from);
+		exit(98);
+	}
+}
+
 int main(int argc, char *argv[])
 {
 	int fd_from, fd_to;
-	ssize_t r, w, total;
+	ssize_t r_first;
 	char *buf;
 
 	if (argc != 3)
@@ -45,46 +80,36 @@ int main(int argc, char *argv[])
 	fd_from = open(argv[1], O_RDONLY);
 	if (fd_from == -1)
 	{
-		dprintf(STDERR_FILENO, "Error: Can't read from file %s\n", argv[1]);
-		free(buf), exit(98);
+		dprintf(STDERR_FILENO, "Error: Can't read from file %s\n",
+			argv[1]);
+		free(buf);
+		exit(98);
 	}
 
-	/* جرّب القراءة أولاً لتحديد حالة 98 قبل محاولة فتح الوجهة */
-	r = read(fd_from, buf, BUFSIZE);
-	if (r == -1)
+	/* جرّب القراءة أولاً لضمان كود 98 عند فشل read */
+	r_first = read(fd_from, buf, BUFSIZE);
+	if (r_first == -1)
 	{
-		dprintf(STDERR_FILENO, "Error: Can't read from file %s\n", argv[1]);
-		free(buf), close_fd(fd_from), exit(98);
+		dprintf(STDERR_FILENO, "Error: Can't read from file %s\n",
+			argv[1]);
+		free(buf);
+		close_fd(fd_from);
+		exit(98);
 	}
 
 	fd_to = open(argv[2], O_WRONLY | O_CREAT | O_TRUNC, 0664);
 	if (fd_to == -1)
 	{
 		dprintf(STDERR_FILENO, "Error: Can't write to %s\n", argv[2]);
-		free(buf), close_fd(fd_from), exit(99);
+		free(buf);
+		close_fd(fd_from);
+		exit(99);
 	}
 
-	/* اكتب أول كتلة إن وُجدت، ثم أكمل القراءة/الكتابة */
-	while (r > 0)
-	{
-		total = 0;
-		while (total < r)
-		{
-			w = write(fd_to, buf + total, r - total);
-			if (w == -1)
-			{
-				dprintf(STDERR_FILENO, "Error: Can't write to %s\n", argv[2]);
-				free(buf), close_fd(fd_from), close_fd(fd_to), exit(99);
-			}
-			total += w;
-		}
-		r = read(fd_from, buf, BUFSIZE);
-		if (r == -1)
-		{
-			dprintf(STDERR_FILENO, "Error: Can't read from file %s\n", argv[1]);
-			free(buf), close_fd(fd_from), close_fd(fd_to), exit(98);
-		}
-	}
+	if (r_first > 0)
+		write_chunk(fd_to, buf, r_first, argv[2]);
+
+	copy_rest(fd_from, fd_to, buf, argv[1], argv[2]);
 
 	free(buf);
 	close_fd(fd_from);
