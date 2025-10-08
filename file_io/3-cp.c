@@ -7,16 +7,11 @@
 
 #define BUFSIZE 1024
 
-/**
- * create_buffer - allocate 1KB buffer and handle error
- * @file_to: name of destination file (for error message)
- * Return: pointer to buffer
- */
 static char *create_buffer(const char *file_to)
 {
 	char *buf = malloc(BUFSIZE);
 
-	if (buf == NULL)
+	if (!buf)
 	{
 		dprintf(STDERR_FILENO, "Error: Can't write to %s\n", file_to);
 		exit(99);
@@ -24,31 +19,19 @@ static char *create_buffer(const char *file_to)
 	return (buf);
 }
 
-/**
- * close_fd - close a file descriptor with proper error handling
- * @fd: file descriptor
- */
 static void close_fd(int fd)
 {
-	int c = close(fd);
-
-	if (c == -1)
+	if (close(fd) == -1)
 	{
 		dprintf(STDERR_FILENO, "Error: Can't close fd %d\n", fd);
 		exit(100);
 	}
 }
 
-/**
- * main - copy content of one file to another
- * @argc: argument count
- * @argv: argument vector
- * Return: 0 on success, exits with codes 97/98/99/100 on failure
- */
 int main(int argc, char *argv[])
 {
 	int fd_from, fd_to;
-	ssize_t r, w;
+	ssize_t r, w, total;
 	char *buf;
 
 	if (argc != 3)
@@ -63,44 +46,44 @@ int main(int argc, char *argv[])
 	if (fd_from == -1)
 	{
 		dprintf(STDERR_FILENO, "Error: Can't read from file %s\n", argv[1]);
-		free(buf);
-		exit(98);
+		free(buf), exit(98);
+	}
+
+	/* جرّب القراءة أولاً لتحديد حالة 98 قبل محاولة فتح الوجهة */
+	r = read(fd_from, buf, BUFSIZE);
+	if (r == -1)
+	{
+		dprintf(STDERR_FILENO, "Error: Can't read from file %s\n", argv[1]);
+		free(buf), close_fd(fd_from), exit(98);
 	}
 
 	fd_to = open(argv[2], O_WRONLY | O_CREAT | O_TRUNC, 0664);
 	if (fd_to == -1)
 	{
 		dprintf(STDERR_FILENO, "Error: Can't write to %s\n", argv[2]);
-		free(buf);
-		close_fd(fd_from);
-		exit(99);
+		free(buf), close_fd(fd_from), exit(99);
 	}
 
-	while ((r = read(fd_from, buf, BUFSIZE)) > 0)
+	/* اكتب أول كتلة إن وُجدت، ثم أكمل القراءة/الكتابة */
+	while (r > 0)
 	{
-		ssize_t total = 0;
-
+		total = 0;
 		while (total < r)
 		{
 			w = write(fd_to, buf + total, r - total);
 			if (w == -1)
 			{
 				dprintf(STDERR_FILENO, "Error: Can't write to %s\n", argv[2]);
-				free(buf);
-				close_fd(fd_from);
-				close_fd(fd_to);
-				exit(99);
+				free(buf), close_fd(fd_from), close_fd(fd_to), exit(99);
 			}
 			total += w;
 		}
-	}
-	if (r == -1)
-	{
-		dprintf(STDERR_FILENO, "Error: Can't read from file %s\n", argv[1]);
-		free(buf);
-		close_fd(fd_from);
-		close_fd(fd_to);
-		exit(98);
+		r = read(fd_from, buf, BUFSIZE);
+		if (r == -1)
+		{
+			dprintf(STDERR_FILENO, "Error: Can't read from file %s\n", argv[1]);
+			free(buf), close_fd(fd_from), close_fd(fd_to), exit(98);
+		}
 	}
 
 	free(buf);
@@ -108,4 +91,3 @@ int main(int argc, char *argv[])
 	close_fd(fd_to);
 	return (0);
 }
-
