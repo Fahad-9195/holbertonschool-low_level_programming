@@ -173,7 +173,7 @@ static void print_header(unsigned char *ei, int is64, int is_msb,
 		if (osabi)
 			printf("%s\n", osabi);
 		else
-			printf("<unknown: %d>\n", ei[EI_OSABI]);
+			printf("<unknown: %x>\n", ei[EI_OSABI]);
 	}
 
 	printf("  ABI Version:                       %d\n",
