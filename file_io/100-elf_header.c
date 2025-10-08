@@ -115,6 +115,29 @@ static const char *osabi_known_str(unsigned char o)
 }
 
 /**
+ * print_type_specific - helper for non-standard e_type
+ * @t: e_type (host-endian)
+ */
+static void print_type_specific(uint16_t t)
+{
+	if (t >= ET_LOOS && t <= ET_HIOS)
+	{
+		printf("  Type:                              "
+		       "OS Specific: (0x%x)\n", t);
+	}
+	else if (t >= ET_LOPROC)
+	{
+		printf("  Type:                              "
+		       "Processor Specific: (0x%x)\n", t);
+	}
+	else
+	{
+		printf("  Type:                              "
+		       "UNKNOWN (0x%x)\n", t);
+	}
+}
+
+/**
  * print_type_line - print the ELF file Type like readelf
  * @t: e_type (host-endian)
  */
@@ -150,19 +173,7 @@ static void print_type_line(uint16_t t)
 		printf("  Type:                              %s\n", s);
 		return;
 	}
-
-	if (t >= ET_LOOS && t <= ET_HIOS)
-	{
-		printf("  Type:                              OS Specific: (0x%x)\n", t);
-	}
-	else if (t >= ET_LOPROC)
-	{
-		printf("  Type:                              Processor Specific: (0x%x)\n", t);
-	}
-	else
-	{
-		printf("  Type:                              UNKNOWN (0x%x)\n", t);
-	}
+	print_type_specific(t);
 }
 
 /**
@@ -214,7 +225,50 @@ static void print_ident(const unsigned char *ei)
 }
 
 /**
- * print_type_and_entry - print Type and Entry lines
+ * print_entry_64 - print Type and Entry for 64-bit
+ * @h: 64-bit ELF header
+ * @is_msb: 1 if big-endian file
+ */
+static void print_entry_64(const Elf64_Ehdr *h, int is_msb)
+{
+	uint16_t type;
+	uint64_t entry;
+
+	type = h->e_type;
+	entry = h->e_entry;
+	if (is_msb)
+	{
+		type = bswap16(type);
+		entry = bswap64(entry);
+	}
+	print_type_line(type);
+	printf("  Entry point address:               0x%lx\n",
+	       (unsigned long)entry);
+}
+
+/**
+ * print_entry_32 - print Type and Entry for 32-bit
+ * @h: 32-bit ELF header
+ * @is_msb: 1 if big-endian file
+ */
+static void print_entry_32(const Elf32_Ehdr *h, int is_msb)
+{
+	uint16_t type;
+	uint32_t entry;
+
+	type = h->e_type;
+	entry = h->e_entry;
+	if (is_msb)
+	{
+		type = bswap16(type);
+		entry = bswap32(entry);
+	}
+	print_type_line(type);
+	printf("  Entry point address:               0x%x\n", entry);
+}
+
+/**
+ * print_type_and_entry - dispatch to 32/64 entry printing
  * @ei: pointer to e_ident (unused)
  * @is64: 1 if ELFCLASS64, else 0
  * @is_msb: 1 if big-endian file, else 0
@@ -226,40 +280,9 @@ static void print_type_and_entry(unsigned char *ei, int is64, int is_msb,
 	(void)ei;
 
 	if (is64)
-	{
-		Elf64_Ehdr *h;
-		uint16_t type;
-		uint64_t entry;
-
-		h = (Elf64_Ehdr *)hdr_buf;
-		type = h->e_type;
-		entry = h->e_entry;
-		if (is_msb)
-		{
-			type = bswap16(type);
-			entry = bswap64(entry);
-		}
-		print_type_line(type);
-		printf("  Entry point address:               0x%lx\n",
-		       (unsigned long)entry);
-	}
+		print_entry_64((Elf64_Ehdr *)hdr_buf, is_msb);
 	else
-	{
-		Elf32_Ehdr *h2;
-		uint16_t type2;
-		uint32_t entry2;
-
-		h2 = (Elf32_Ehdr *)hdr_buf;
-		type2 = h2->e_type;
-		entry2 = h2->e_entry;
-		if (is_msb)
-		{
-			type2 = bswap16(type2);
-			entry2 = bswap32(entry2);
-		}
-		print_type_line(type2);
-		printf("  Entry point address:               0x%x\n", entry2);
-	}
+		print_entry_32((Elf32_Ehdr *)hdr_buf, is_msb);
 }
 
 /**
@@ -277,7 +300,7 @@ static void print_header(unsigned char *ei, int is64, int is_msb,
 	print_type_and_entry(ei, is64, is_msb, hdr_buf);
 }
 
-/* ---------- small error helpers to keep main under 40 lines ---------- */
+/* ----------------- small error helpers ----------------- */
 
 /**
  * die_usage - print usage and exit 98
@@ -326,6 +349,49 @@ static void die_close(int fd)
 	exit(98);
 }
 
+/* ------------------ tiny I/O helpers ------------------ */
+
+/**
+ * open_read_header - open file and read header into @buf
+ * @fname: file name
+ * @buf: destination buffer
+ * Return: open fd on success (exits 98 on failure)
+ */
+static int open_read_header(const char *fname, unsigned char *buf)
+{
+	int fd;
+	ssize_t r;
+
+	fd = open(fname, O_RDONLY);
+	if (fd == -1)
+		die_open(fname);
+
+	r = read(fd, buf, HDR_MAX);
+	if (r < (ssize_t)sizeof(Elf32_Ehdr))
+	{
+		close(fd);
+		die_readhdr();
+	}
+	return (fd);
+}
+
+/**
+ * check_magic - verify ELF magic, exit 98 on failure
+ * @ei: pointer to e_ident
+ * @fd: open file descriptor (closed on failure)
+ */
+static void check_magic(const unsigned char *ei, int fd)
+{
+	if (!(ei[EI_MAG0] == ELFMAG0 &&
+	      ei[EI_MAG1] == ELFMAG1 &&
+	      ei[EI_MAG2] == ELFMAG2 &&
+	      ei[EI_MAG3] == ELFMAG3))
+	{
+		close(fd);
+		die_notelf();
+	}
+}
+
 /**
  * main - display information contained in ELF header
  * @argc: argument count
@@ -335,39 +401,18 @@ static void die_close(int fd)
 int main(int argc, char **argv)
 {
 	int fd;
-	ssize_t r;
 	unsigned char buf[HDR_MAX];
 	unsigned char *ei;
 	int is64;
 	int is_msb;
 
 	if (argc != 2)
-	{
 		die_usage();
-	}
 
-	fd = open(argv[1], O_RDONLY);
-	if (fd == -1)
-	{
-		die_open(argv[1]);
-	}
-
-	r = read(fd, buf, HDR_MAX);
-	if (r < (ssize_t)sizeof(Elf32_Ehdr))
-	{
-		close(fd);
-		die_readhdr();
-	}
+	fd = open_read_header(argv[1], buf);
 
 	ei = ((Elf64_Ehdr *)buf)->e_ident;
-	if (!(ei[EI_MAG0] == ELFMAG0 &&
-	      ei[EI_MAG1] == ELFMAG1 &&
-	      ei[EI_MAG2] == ELFMAG2 &&
-	      ei[EI_MAG3] == ELFMAG3))
-	{
-		close(fd);
-		die_notelf();
-	}
+	check_magic(ei, fd);
 
 	is64 = (ei[EI_CLASS] == ELFCLASS64);
 	is_msb = (ei[EI_DATA] == ELFDATA2MSB);
@@ -375,9 +420,7 @@ int main(int argc, char **argv)
 	print_header(ei, is64, is_msb, buf);
 
 	if (close(fd) == -1)
-	{
 		die_close(fd);
-	}
 
 	return (0);
 }
