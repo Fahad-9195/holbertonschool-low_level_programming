@@ -194,7 +194,7 @@ static void print_ident(const unsigned char *ei)
 
 /**
  * print_type_and_entry - print Type and Entry lines
- * @ei: pointer to e_ident
+ * @ei: pointer to e_ident (unused, kept for signature stability)
  * @is64: 1 if ELFCLASS64, else 0
  * @is_msb: 1 if big-endian file, else 0
  * @hdr_buf: buffer holding the header bytes
@@ -202,6 +202,8 @@ static void print_ident(const unsigned char *ei)
 static void print_type_and_entry(unsigned char *ei, int is64, int is_msb,
 				 void *hdr_buf)
 {
+	(void)ei;
+
 	if (is64)
 	{
 		Elf64_Ehdr *h;
