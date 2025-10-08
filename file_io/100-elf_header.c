@@ -69,11 +69,9 @@ static void print_type(uint16_t t)
 	case ET_CORE: s = "CORE (Core file)"; break;
 	default:
 		if (t >= ET_LOOS && t <= ET_HIOS)
-			printf("  Type:                              OS Specific: "
-			       "(0x%x)\n", t);
-		else if (t >= ET_LOPROC && t <= ET_HIPROC)
-			printf("  Type:                              Processor "
-			       "Specific: (0x%x)\n", t);
+			printf("  Type:                              OS Specific: (0x%x)\n", t);
+		else if (t >= ET_LOPROC) /* upper bound is always true for 16-bit */
+			printf("  Type:                              Processor Specific: (0x%x)\n", t);
 		else
 			printf("  Type:                              UNKNOWN (0x%x)\n", t);
 		return;
@@ -81,14 +79,16 @@ static void print_type(uint16_t t)
 	printf("  Type:                              %s\n", s);
 }
 
-static void print_header(unsigned char *ei, int is64, int is_msb,
-			 void *hdr_buf)
+static void print_header(unsigned char *ei, int is64, int is_msb, void *hdr_buf)
 {
+	int i;
+
 	printf("ELF Header:\n");
 
 	/* Magic */
 	printf("  Magic:   ");
-	for (int i = 0; i < EI_NIDENT; i++) {
+	for (i = 0; i < EI_NIDENT; i++)
+	{
 		printf("%02x", ei[i]);
 		if (i != EI_NIDENT - 1)
 			printf(" ");
@@ -96,18 +96,13 @@ static void print_header(unsigned char *ei, int is64, int is_msb,
 	printf("\n");
 
 	/* Class, Data, Version, OS/ABI, ABI Version */
-	printf("  Class:                             %s\n",
-	       class_str(ei[EI_CLASS]));
-	printf("  Data:                              %s\n",
-	       data_str(ei[EI_DATA]));
-	printf("  Version:                           %d (current)\n",
-	       ei[EI_VERSION]);
-	printf("  OS/ABI:                            %s\n",
-	       osabi_str(ei[EI_OSABI]));
-	printf("  ABI Version:                       %d\n",
-	       ei[EI_ABIVERSION]);
+	printf("  Class:                             %s\n", class_str(ei[EI_CLASS]));
+	printf("  Data:                              %s\n", data_str(ei[EI_DATA]));
+	printf("  Version:                           %d (current)\n", ei[EI_VERSION]);
+	printf("  OS/ABI:                            %s\n", osabi_str(ei[EI_OSABI]));
+	printf("  ABI Version:                       %d\n", ei[EI_ABIVERSION]);
 
-	/* Type + Entry: need endianness swap if MSB */
+	/* Type + Entry: handle endianness if MSB */
 	if (is64) {
 		Elf64_Ehdr *h = (Elf64_Ehdr *)hdr_buf;
 		uint16_t type = h->e_type;
