@@ -87,18 +87,30 @@ static const char *osabi_known_str(unsigned char o)
 {
 	switch (o)
 	{
-	case ELFOSABI_SYSV: return ("UNIX - System V");
-	case ELFOSABI_HPUX: return ("UNIX - HP-UX");
-	case ELFOSABI_NETBSD: return ("UNIX - NetBSD");
-	case ELFOSABI_LINUX: return ("UNIX - Linux");
-	case ELFOSABI_SOLARIS: return ("UNIX - Solaris");
-	case ELFOSABI_AIX: return ("UNIX - AIX");
-	case ELFOSABI_FREEBSD: return ("UNIX - FreeBSD");
-	case ELFOSABI_OPENBSD: return ("UNIX - OpenBSD");
-	case ELFOSABI_ARM_AEABI: return ("ARM EABI");
-	case ELFOSABI_ARM: return ("ARM");
-	case ELFOSABI_STANDALONE: return ("Standalone App");
-	default: return (NULL);
+	case ELFOSABI_SYSV:
+		return ("UNIX - System V");
+	case ELFOSABI_HPUX:
+		return ("UNIX - HP-UX");
+	case ELFOSABI_NETBSD:
+		return ("UNIX - NetBSD");
+	case ELFOSABI_LINUX:
+		return ("UNIX - Linux");
+	case ELFOSABI_SOLARIS:
+		return ("UNIX - Solaris");
+	case ELFOSABI_AIX:
+		return ("UNIX - AIX");
+	case ELFOSABI_FREEBSD:
+		return ("UNIX - FreeBSD");
+	case ELFOSABI_OPENBSD:
+		return ("UNIX - OpenBSD");
+	case ELFOSABI_ARM_AEABI:
+		return ("ARM EABI");
+	case ELFOSABI_ARM:
+		return ("ARM");
+	case ELFOSABI_STANDALONE:
+		return ("Standalone App");
+	default:
+		return (NULL);
 	}
 }
 
@@ -113,12 +125,24 @@ static void print_type_line(uint16_t t)
 	s = NULL;
 	switch (t)
 	{
-	case ET_NONE: s = "NONE (No file type)"; break;
-	case ET_REL:  s = "REL (Relocatable file)"; break;
-	case ET_EXEC: s = "EXEC (Executable file)"; break;
-	case ET_DYN:  s = "DYN (Shared object file)"; break;
-	case ET_CORE: s = "CORE (Core file)"; break;
-	default: s = NULL; break;
+	case ET_NONE:
+		s = "NONE (No file type)";
+		break;
+	case ET_REL:
+		s = "REL (Relocatable file)";
+		break;
+	case ET_EXEC:
+		s = "EXEC (Executable file)";
+		break;
+	case ET_DYN:
+		s = "DYN (Shared object file)";
+		break;
+	case ET_CORE:
+		s = "CORE (Core file)";
+		break;
+	default:
+		s = NULL;
+		break;
 	}
 
 	if (s != NULL)
@@ -257,6 +281,55 @@ static void print_header(unsigned char *ei, int is64, int is_msb,
 	print_type_and_entry(ei, is64, is_msb, hdr_buf);
 }
 
+/* ---------- small error helpers to keep main under 40 lines ---------- */
+
+/**
+ * die_usage - print usage and exit 98
+ */
+static void die_usage(void)
+{
+	fprintf(stderr, "Usage: elf_header elf_filename\n");
+	exit(98);
+}
+
+/**
+ * die_open - print open error and exit 98
+ * @fname: file name
+ */
+static void die_open(const char *fname)
+{
+	fprintf(stderr, "Error: Can't open file %s\n", fname);
+	exit(98);
+}
+
+/**
+ * die_readhdr - print read header error and exit 98
+ */
+static void die_readhdr(void)
+{
+	fprintf(stderr, "Error: Can't read ELF header\n");
+	exit(98);
+}
+
+/**
+ * die_notelf - print not-ELF error and exit 98
+ */
+static void die_notelf(void)
+{
+	fprintf(stderr, "Error: Not an ELF file\n");
+	exit(98);
+}
+
+/**
+ * die_close - print close error and exit 98
+ * @fd: file descriptor
+ */
+static void die_close(int fd)
+{
+	fprintf(stderr, "Error: Can't close fd %d\n", fd);
+	exit(98);
+}
+
 /**
  * main - display information contained in ELF header
  * @argc: argument count
@@ -274,23 +347,20 @@ int main(int argc, char **argv)
 
 	if (argc != 2)
 	{
-		fprintf(stderr, "Usage: elf_header elf_filename\n");
-		exit(98);
+		die_usage();
 	}
 
 	fd = open(argv[1], O_RDONLY);
 	if (fd == -1)
 	{
-		fprintf(stderr, "Error: Can't open file %s\n", argv[1]);
-		exit(98);
+		die_open(argv[1]);
 	}
 
 	r = read(fd, buf, HDR_MAX);
 	if (r < (ssize_t)sizeof(Elf32_Ehdr))
 	{
-		fprintf(stderr, "Error: Can't read ELF header\n");
 		close(fd);
-		exit(98);
+		die_readhdr();
 	}
 
 	ei = ((Elf64_Ehdr *)buf)->e_ident;
@@ -299,9 +369,8 @@ int main(int argc, char **argv)
 	      ei[EI_MAG2] == ELFMAG2 &&
 	      ei[EI_MAG3] == ELFMAG3))
 	{
-		fprintf(stderr, "Error: Not an ELF file\n");
 		close(fd);
-		exit(98);
+		die_notelf();
 	}
 
 	is64 = (ei[EI_CLASS] == ELFCLASS64);
@@ -311,8 +380,7 @@ int main(int argc, char **argv)
 
 	if (close(fd) == -1)
 	{
-		fprintf(stderr, "Error: Can't close fd %d\n", fd);
-		exit(98);
+		die_close(fd);
 	}
 
 	return (0);
