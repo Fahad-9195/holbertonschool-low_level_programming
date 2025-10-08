@@ -153,18 +153,15 @@ static void print_type_line(uint16_t t)
 
 	if (t >= ET_LOOS && t <= ET_HIOS)
 	{
-		printf("  Type:                              ");
-		printf("OS Specific: (0x%x)\n", t);
+		printf("  Type:                              OS Specific: (0x%x)\n", t);
 	}
 	else if (t >= ET_LOPROC)
 	{
-		printf("  Type:                              ");
-		printf("Processor Specific: (0x%x)\n", t);
+		printf("  Type:                              Processor Specific: (0x%x)\n", t);
 	}
 	else
 	{
-		printf("  Type:                              ");
-		printf("UNKNOWN (0x%x)\n", t);
+		printf("  Type:                              UNKNOWN (0x%x)\n", t);
 	}
 }
 
@@ -207,7 +204,7 @@ static void print_ident(const unsigned char *ei)
 
 	osabi = osabi_known_str(ei[EI_OSABI]);
 	printf("  OS/ABI:                            ");
-	if (osabi)
+	if (osabi != NULL)
 		printf("%s\n", osabi);
 	else
 		printf("<unknown: %x>\n", ei[EI_OSABI]);
@@ -218,7 +215,7 @@ static void print_ident(const unsigned char *ei)
 
 /**
  * print_type_and_entry - print Type and Entry lines
- * @ei: pointer to e_ident (unused, kept for signature stability)
+ * @ei: pointer to e_ident (unused)
  * @is64: 1 if ELFCLASS64, else 0
  * @is_msb: 1 if big-endian file, else 0
  * @hdr_buf: buffer holding the header bytes
@@ -261,8 +258,7 @@ static void print_type_and_entry(unsigned char *ei, int is64, int is_msb,
 			entry2 = bswap32(entry2);
 		}
 		print_type_line(type2);
-		printf("  Entry point address:               0x%x\n",
-		       entry2);
+		printf("  Entry point address:               0x%x\n", entry2);
 	}
 }
 
