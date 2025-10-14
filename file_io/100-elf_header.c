@@ -4,7 +4,7 @@
 #include <fcntl.h>
 #include <elf.h>
 
-/* ------------ byte-swap helpers (C90 + Betty) ------------ */
+/* -------------------- Byte-swap helpers -------------------- */
 static unsigned short bswap16(unsigned short x)
 {
 	return ((unsigned short)((x >> 8) | (x << 8)));
@@ -15,13 +15,12 @@ static unsigned int bswap32(unsigned int x)
 	unsigned int y;
 
 	y = ((x >> 24) & 0x000000FFU) |
-	    ((x >> 8)  & 0x0000FF00U) |
-	    ((x << 8)  & 0x00FF0000U) |
+	    ((x >> 8) & 0x0000FF00U) |
+	    ((x << 8) & 0x00FF0000U) |
 	    ((x << 24) & 0xFF000000U);
 	return (y);
 }
 
-/* swap 64-bit using unsigned long only (byte-by-byte) */
 static unsigned long bswap64_ul(unsigned long x)
 {
 	unsigned long y = 0;
@@ -35,13 +34,7 @@ static unsigned long bswap64_ul(unsigned long x)
 	return (y);
 }
 
-/* ------------ header read & normalize ------------ */
-union ehdr_u
-{
-	Elf64_Ehdr e64;
-	Elf32_Ehdr e32;
-};
-
+/* -------------------- Error helpers -------------------- */
 static void die_usage(void)
 {
 	dprintf(2, "Usage: elf_header elf_filename\n");
@@ -66,43 +59,62 @@ static void die_not_elf(const char *p)
 	exit(98);
 }
 
-static void read_header(const char *path, union ehdr_u *eh)
+/* -------------------- IO (two reads, no lseek) -------------------- */
+static void read_header(const char *path, Elf64_Ehdr *eh)
 {
 	int fd;
 	ssize_t r;
+	unsigned char *id;
+	size_t need;
 
 	fd = open(path, O_RDONLY);
 	if (fd == -1)
 		die_open(path);
 
-	r = read(fd, &eh->e64, sizeof(eh->e64));
-	if (r < (ssize_t)sizeof(Elf32_Ehdr))
+	/* read the identification bytes first (16 bytes) */
+	r = read(fd, eh->e_ident, EI_NIDENT);
+	if (r != (ssize_t)EI_NIDENT)
 	{
-		close(fd);
+		(void)close(fd);
+		die_not_elf(path);
+	}
+
+	/* validate magic */
+	id = eh->e_ident;
+	if (!(id[EI_MAG0] == ELFMAG0 &&
+	      id[EI_MAG1] == ELFMAG1 &&
+	      id[EI_MAG2] == ELFMAG2 &&
+	      id[EI_MAG3] == ELFMAG3))
+	{
+		(void)close(fd);
+		die_not_elf(path);
+	}
+
+	/* read the rest of the header */
+	need = sizeof(*eh) - EI_NIDENT;
+	r = read(fd, ((char *)eh) + EI_NIDENT, need);
+	if (r != (ssize_t)need)
+	{
+		(void)close(fd);
 		die_read(path);
 	}
 	(void)close(fd);
 }
 
-static void must_be_elf_or_die(const char *path, unsigned char *id)
-{
-	if (!(id[EI_MAG0] == ELFMAG0 &&
-	      id[EI_MAG1] == ELFMAG1 &&
-	      id[EI_MAG2] == ELFMAG2 &&
-	      id[EI_MAG3] == ELFMAG3))
-		die_not_elf(path);
-}
-
-static void normalize_type_entry(union ehdr_u *eh, int cls, int is_msb,
-				 unsigned short *ptype, unsigned long *pentry)
+/* -------------------- Normalize fields -------------------- */
+static void normalize_type_entry(Elf64_Ehdr *e64, int cls, int is_msb,
+				 unsigned short *ptype,
+				 unsigned long *pentry)
 {
 	unsigned short et;
 	unsigned long en;
 
 	if (cls == ELFCLASS32)
 	{
-		et = eh->e32.e_type;
-		en = (unsigned long)eh->e32.e_entry;
+		Elf32_Ehdr *e32 = (Elf32_Ehdr *)e64;
+
+		et = e32->e_type;
+		en = (unsigned long)e32->e_entry;
 		if (is_msb)
 		{
 			et = bswap16(et);
@@ -111,8 +123,8 @@ static void normalize_type_entry(union ehdr_u *eh, int cls, int is_msb,
 	}
 	else
 	{
-		et = eh->e64.e_type;
-		en = (unsigned long)eh->e64.e_entry;
+		et = e64->e_type;
+		en = (unsigned long)e64->e_entry;
 		if (is_msb)
 		{
 			et = bswap16(et);
@@ -123,7 +135,7 @@ static void normalize_type_entry(union ehdr_u *eh, int cls, int is_msb,
 	*pentry = en;
 }
 
-/* ------------ printers (قصيرة < 40 سطر) ------------ */
+/* -------------------- Printers -------------------- */
 static void print_magic(unsigned char *id)
 {
 	int i;
@@ -154,11 +166,19 @@ static void print_data(int data_enc)
 {
 	printf("  Data:                              ");
 	if (data_enc == ELFDATA2LSB)
-		printf("2's complement, little endian\n");
+	{
+		printf("2's complement, ");
+		printf("little endian\n");
+	}
 	else if (data_enc == ELFDATA2MSB)
-		printf("2's complement, big endian\n");
+	{
+		printf("2's complement, ");
+		printf("big endian\n");
+	}
 	else
+	{
 		printf("<unknown: %x>\n", data_enc);
+	}
 }
 
 static void print_version(int ver)
@@ -175,17 +195,39 @@ static void print_osabi(int osabi)
 	printf("  OS/ABI:                            ");
 	switch (osabi)
 	{
-	case ELFOSABI_SYSV: printf("UNIX - System V\n"); break;
-	case ELFOSABI_HPUX: printf("UNIX - HP-UX\n"); break;
-	case ELFOSABI_NETBSD: printf("UNIX - NetBSD\n"); break;
-	case ELFOSABI_LINUX: printf("UNIX - Linux\n"); break;
-	case ELFOSABI_SOLARIS: printf("UNIX - Solaris\n"); break;
-	case ELFOSABI_IRIX: printf("UNIX - IRIX\n"); break;
-	case ELFOSABI_FREEBSD: printf("UNIX - FreeBSD\n"); break;
-	case ELFOSABI_TRU64: printf("UNIX - TRU64\n"); break;
-	case ELFOSABI_ARM: printf("ARM\n"); break;
-	case ELFOSABI_STANDALONE: printf("Standalone App\n"); break;
-	default: printf("<unknown: %x>\n", osabi); break;
+	case ELFOSABI_SYSV:
+		printf("UNIX - System V\n");
+		break;
+	case ELFOSABI_HPUX:
+		printf("UNIX - HP-UX\n");
+		break;
+	case ELFOSABI_NETBSD:
+		printf("UNIX - NetBSD\n");
+		break;
+	case ELFOSABI_LINUX:
+		printf("UNIX - Linux\n");
+		break;
+	case ELFOSABI_SOLARIS:
+		printf("UNIX - Solaris\n");
+		break;
+	case ELFOSABI_IRIX:
+		printf("UNIX - IRIX\n");
+		break;
+	case ELFOSABI_FREEBSD:
+		printf("UNIX - FreeBSD\n");
+		break;
+	case ELFOSABI_TRU64:
+		printf("UNIX - TRU64\n");
+		break;
+	case ELFOSABI_ARM:
+		printf("ARM\n");
+		break;
+	case ELFOSABI_STANDALONE:
+		printf("Standalone App\n");
+		break;
+	default:
+		printf("<unknown: %x>\n", osabi);
+		break;
 	}
 }
 
@@ -199,24 +241,37 @@ static void print_type(unsigned short etype)
 	printf("  Type:                              ");
 	switch (etype)
 	{
-	case ET_NONE: printf("NONE (No file type)\n"); break;
-	case ET_REL:  printf("REL (Relocatable file)\n"); break;
-	case ET_EXEC: printf("EXEC (Executable file)\n"); break;
-	case ET_DYN:  printf("DYN (Shared object file)\n"); break;
-	case ET_CORE: printf("CORE (Core file)\n"); break;
-	default:      printf("<unknown: %x>\n", etype); break;
+	case ET_NONE:
+		printf("NONE (No file type)\n");
+		break;
+	case ET_REL:
+		printf("REL (Relocatable file)\n");
+		break;
+	case ET_EXEC:
+		printf("EXEC (Executable file)\n");
+		break;
+	case ET_DYN:
+		printf("DYN (Shared object file)\n");
+		break;
+	case ET_CORE:
+		printf("CORE (Core file)\n");
+		break;
+	default:
+		printf("<unknown: %x>\n", etype);
+		break;
 	}
 }
 
 static void print_entry(unsigned long entry)
 {
-	printf("  Entry point address:               0x%lx\n", entry);
+	printf("  Entry point address:               ");
+	printf("0x%lx\n", entry);
 }
 
-/* ------------ main (قصير) ------------ */
+/* -------------------- main -------------------- */
 int main(int ac, char **av)
 {
-	union ehdr_u eh;
+	Elf64_Ehdr eh;
 	unsigned char *id;
 	int cls, is_msb;
 	unsigned short etype;
@@ -227,9 +282,7 @@ int main(int ac, char **av)
 
 	read_header(av[1], &eh);
 
-	id = eh.e64.e_ident;
-	must_be_elf_or_die(av[1], id);
-
+	id = eh.e_ident;
 	cls = id[EI_CLASS];
 	is_msb = (id[EI_DATA] == ELFDATA2MSB);
 
