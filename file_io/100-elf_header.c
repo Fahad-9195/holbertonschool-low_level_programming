@@ -4,12 +4,23 @@
 #include <fcntl.h>
 #include <elf.h>
 
-/* -------------------- Byte-swap helpers -------------------- */
+/**
+ * bswap16 - swap byte order of 16-bit unsigned value
+ * @x: value to swap
+ *
+ * Return: swapped value.
+ */
 static unsigned short bswap16(unsigned short x)
 {
 	return ((unsigned short)((x >> 8) | (x << 8)));
 }
 
+/**
+ * bswap32 - swap byte order of 32-bit unsigned value
+ * @x: value to swap
+ *
+ * Return: swapped value.
+ */
 static unsigned int bswap32(unsigned int x)
 {
 	unsigned int y;
@@ -21,6 +32,13 @@ static unsigned int bswap32(unsigned int x)
 	return (y);
 }
 
+/**
+ * bswap64_ul - swap byte order of 64-bit value using unsigned long
+ * @x: value to swap
+ *
+ * Description: Uses byte-by-byte shifts to avoid long long in C90.
+ * Return: swapped value.
+ */
 static unsigned long bswap64_ul(unsigned long x)
 {
 	unsigned long y = 0;
@@ -34,32 +52,62 @@ static unsigned long bswap64_ul(unsigned long x)
 	return (y);
 }
 
-/* -------------------- Error helpers -------------------- */
+/**
+ * die_usage - print usage error and exit(98)
+ *
+ * Return: Nothing (exits).
+ */
 static void die_usage(void)
 {
 	dprintf(2, "Usage: elf_header elf_filename\n");
 	exit(98);
 }
 
+/**
+ * die_open - print open error and exit(98)
+ * @p: path that failed to open
+ *
+ * Return: Nothing (exits).
+ */
 static void die_open(const char *p)
 {
 	dprintf(2, "Error: Can't open file %s\n", p);
 	exit(98);
 }
 
+/**
+ * die_read - print read error and exit(98)
+ * @p: path that failed to read
+ *
+ * Return: Nothing (exits).
+ */
 static void die_read(const char *p)
 {
 	dprintf(2, "Error: Can't read ELF header from %s\n", p);
 	exit(98);
 }
 
+/**
+ * die_not_elf - print non-ELF error and exit(98)
+ * @p: given path
+ *
+ * Return: Nothing (exits).
+ */
 static void die_not_elf(const char *p)
 {
 	dprintf(2, "Error: Not an ELF file: %s\n", p);
 	exit(98);
 }
 
-/* -------------------- IO (two reads, no lseek) -------------------- */
+/**
+ * read_header - read ELF header with at most two read() calls
+ * @path: file path
+ * @eh: out buffer for Elf64_Ehdr (also used for 32-bit via cast)
+ *
+ * Description: Reads EI_NIDENT first, validates magic, then reads
+ * the rest of the header. No lseek is used.
+ * Return: Nothing. On error, exits with code 98.
+ */
 static void read_header(const char *path, Elf64_Ehdr *eh)
 {
 	int fd;
@@ -71,7 +119,6 @@ static void read_header(const char *path, Elf64_Ehdr *eh)
 	if (fd == -1)
 		die_open(path);
 
-	/* read the identification bytes first (16 bytes) */
 	r = read(fd, eh->e_ident, EI_NIDENT);
 	if (r != (ssize_t)EI_NIDENT)
 	{
@@ -79,7 +126,6 @@ static void read_header(const char *path, Elf64_Ehdr *eh)
 		die_not_elf(path);
 	}
 
-	/* validate magic */
 	id = eh->e_ident;
 	if (!(id[EI_MAG0] == ELFMAG0 &&
 	      id[EI_MAG1] == ELFMAG1 &&
@@ -90,7 +136,6 @@ static void read_header(const char *path, Elf64_Ehdr *eh)
 		die_not_elf(path);
 	}
 
-	/* read the rest of the header */
 	need = sizeof(*eh) - EI_NIDENT;
 	r = read(fd, ((char *)eh) + EI_NIDENT, need);
 	if (r != (ssize_t)need)
@@ -101,7 +146,16 @@ static void read_header(const char *path, Elf64_Ehdr *eh)
 	(void)close(fd);
 }
 
-/* -------------------- Normalize fields -------------------- */
+/**
+ * normalize_type_entry - normalize e_type and entry to host endianness
+ * @e64: pointer to 64-bit header buffer (also used for 32-bit via cast)
+ * @cls: EI_CLASS value (ELFCLASS32/ELFCLASS64)
+ * @is_msb: 1 if big endian file, else 0
+ * @ptype: out normalized e_type
+ * @pentry: out normalized entry as unsigned long
+ *
+ * Return: Nothing.
+ */
 static void normalize_type_entry(Elf64_Ehdr *e64, int cls, int is_msb,
 				 unsigned short *ptype,
 				 unsigned long *pentry)
@@ -135,7 +189,12 @@ static void normalize_type_entry(Elf64_Ehdr *e64, int cls, int is_msb,
 	*pentry = en;
 }
 
-/* -------------------- Printers -------------------- */
+/**
+ * print_magic - print Magic bytes
+ * @id: e_ident array
+ *
+ * Return: Nothing.
+ */
 static void print_magic(unsigned char *id)
 {
 	int i;
@@ -151,6 +210,12 @@ static void print_magic(unsigned char *id)
 	printf("\n");
 }
 
+/**
+ * print_class - print Class field
+ * @cls: EI_CLASS
+ *
+ * Return: Nothing.
+ */
 static void print_class(int cls)
 {
 	printf("  Class:                             ");
@@ -162,6 +227,12 @@ static void print_class(int cls)
 		printf("<unknown: %x>\n", cls);
 }
 
+/**
+ * print_data - print Data (endianness) field
+ * @data_enc: EI_DATA
+ *
+ * Return: Nothing.
+ */
 static void print_data(int data_enc)
 {
 	printf("  Data:                              ");
@@ -181,6 +252,12 @@ static void print_data(int data_enc)
 	}
 }
 
+/**
+ * print_version - print Version field
+ * @ver: EI_VERSION
+ *
+ * Return: Nothing.
+ */
 static void print_version(int ver)
 {
 	printf("  Version:                           ");
@@ -190,6 +267,12 @@ static void print_version(int ver)
 		printf("%d\n", ver);
 }
 
+/**
+ * print_osabi - print OS/ABI field
+ * @osabi: EI_OSABI
+ *
+ * Return: Nothing.
+ */
 static void print_osabi(int osabi)
 {
 	printf("  OS/ABI:                            ");
@@ -231,11 +314,23 @@ static void print_osabi(int osabi)
 	}
 }
 
+/**
+ * print_abiver - print ABI Version field
+ * @abiv: EI_ABIVERSION
+ *
+ * Return: Nothing.
+ */
 static void print_abiver(int abiv)
 {
 	printf("  ABI Version:                       %d\n", abiv);
 }
 
+/**
+ * print_type - print Type field
+ * @etype: e_type value
+ *
+ * Return: Nothing.
+ */
 static void print_type(unsigned short etype)
 {
 	printf("  Type:                              ");
@@ -262,13 +357,25 @@ static void print_type(unsigned short etype)
 	}
 }
 
+/**
+ * print_entry - print entry point
+ * @entry: normalized entry address (host endianness)
+ *
+ * Return: Nothing.
+ */
 static void print_entry(unsigned long entry)
 {
 	printf("  Entry point address:               ");
 	printf("0x%lx\n", entry);
 }
 
-/* -------------------- main -------------------- */
+/**
+ * main - display selected ELF header fields (readelf -h style subset)
+ * @ac: argc
+ * @av: argv (expects path to ELF file)
+ *
+ * Return: 0 on success. On error, exits with code 98.
+ */
 int main(int ac, char **av)
 {
 	Elf64_Ehdr eh;
