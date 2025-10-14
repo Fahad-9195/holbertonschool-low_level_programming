@@ -4,21 +4,24 @@
 #include <fcntl.h>
 #include <elf.h>
 
-/* ----- byte-swap helpers (C90-friendly) ----- */
+/* ------------ byte-swap helpers (C90 + Betty) ------------ */
 static unsigned short bswap16(unsigned short x)
 {
-	return (unsigned short)((x >> 8) | (x << 8));
+	return ((unsigned short)((x >> 8) | (x << 8)));
 }
 
 static unsigned int bswap32(unsigned int x)
 {
-	return ((x >> 24) & 0x000000FFU) |
-	       ((x >> 8)  & 0x0000FF00U) |
-	       ((x << 8)  & 0x00FF0000U) |
-	       ((x << 24) & 0xFF000000U);
+	unsigned int y;
+
+	y = ((x >> 24) & 0x000000FFU) |
+	    ((x >> 8)  & 0x0000FF00U) |
+	    ((x << 8)  & 0x00FF0000U) |
+	    ((x << 24) & 0xFF000000U);
+	return (y);
 }
 
-/* swap 64-bit value using only unsigned long and byte shifts */
+/* swap 64-bit using unsigned long only (byte-by-byte) */
 static unsigned long bswap64_ul(unsigned long x)
 {
 	unsigned long y = 0;
@@ -32,76 +35,100 @@ static unsigned long bswap64_ul(unsigned long x)
 	return (y);
 }
 
-int main(int ac, char **av)
+/* ------------ header read & normalize ------------ */
+union ehdr_u
 {
-	int fd, is_msb, cls, i;
+	Elf64_Ehdr e64;
+	Elf32_Ehdr e32;
+};
+
+static void die_usage(void)
+{
+	dprintf(2, "Usage: elf_header elf_filename\n");
+	exit(98);
+}
+
+static void die_open(const char *p)
+{
+	dprintf(2, "Error: Can't open file %s\n", p);
+	exit(98);
+}
+
+static void die_read(const char *p)
+{
+	dprintf(2, "Error: Can't read ELF header from %s\n", p);
+	exit(98);
+}
+
+static void die_not_elf(const char *p)
+{
+	dprintf(2, "Error: Not an ELF file: %s\n", p);
+	exit(98);
+}
+
+static void read_header(const char *path, union ehdr_u *eh)
+{
+	int fd;
 	ssize_t r;
-	union {
-		Elf64_Ehdr e64;
-		Elf32_Ehdr e32;
-	} eh;
-	unsigned char *id;
-	unsigned short etype;
-	unsigned long entry;
 
-	if (ac != 2)
-	{
-		dprintf(2, "Usage: elf_header elf_filename\n");
-		exit(98);
-	}
-
-	fd = open(av[1], O_RDONLY);
+	fd = open(path, O_RDONLY);
 	if (fd == -1)
-	{
-		dprintf(2, "Error: Can't open file %s\n", av[1]);
-		exit(98);
-	}
+		die_open(path);
 
-	r = read(fd, &eh.e64, sizeof(eh.e64));
+	r = read(fd, &eh->e64, sizeof(eh->e64));
 	if (r < (ssize_t)sizeof(Elf32_Ehdr))
 	{
-		dprintf(2, "Error: Can't read ELF header from %s\n", av[1]);
 		close(fd);
-		exit(98);
+		die_read(path);
 	}
-	close(fd);
+	(void)close(fd);
+}
 
-	id = eh.e64.e_ident;
-	if (!(id[EI_MAG0] == ELFMAG0 && id[EI_MAG1] == ELFMAG1 &&
-	      id[EI_MAG2] == ELFMAG2 && id[EI_MAG3] == ELFMAG3))
-	{
-		dprintf(2, "Error: Not an ELF file: %s\n", av[1]);
-		exit(98);
-	}
+static void must_be_elf_or_die(const char *path, unsigned char *id)
+{
+	if (!(id[EI_MAG0] == ELFMAG0 &&
+	      id[EI_MAG1] == ELFMAG1 &&
+	      id[EI_MAG2] == ELFMAG2 &&
+	      id[EI_MAG3] == ELFMAG3))
+		die_not_elf(path);
+}
 
-	cls = id[EI_CLASS];
-	is_msb = (id[EI_DATA] == ELFDATA2MSB);
+static void normalize_type_entry(union ehdr_u *eh, int cls, int is_msb,
+				 unsigned short *ptype, unsigned long *pentry)
+{
+	unsigned short et;
+	unsigned long en;
 
-	/* normalize e_type and entry to host endianness, store entry in unsigned long */
 	if (cls == ELFCLASS32)
 	{
-		etype = eh.e32.e_type;
-		entry = (unsigned long)eh.e32.e_entry;
+		et = eh->e32.e_type;
+		en = (unsigned long)eh->e32.e_entry;
 		if (is_msb)
 		{
-			etype = bswap16(etype);
-			entry = (unsigned long)bswap32((unsigned int)entry);
+			et = bswap16(et);
+			en = (unsigned long)bswap32((unsigned int)en);
 		}
 	}
-	else /* default to 64 */
+	else
 	{
-		etype = eh.e64.e_type;
-		entry = (unsigned long)eh.e64.e_entry;
+		et = eh->e64.e_type;
+		en = (unsigned long)eh->e64.e_entry;
 		if (is_msb)
 		{
-			etype = bswap16(etype);
-			entry = bswap64_ul(entry);
+			et = bswap16(et);
+			en = bswap64_ul(en);
 		}
 	}
+	*ptype = et;
+	*pentry = en;
+}
 
-	/* ---- Output (match readelf -h fields requested) ---- */
+/* ------------ printers (قصيرة < 40 سطر) ------------ */
+static void print_magic(unsigned char *id)
+{
+	int i;
+
 	printf("ELF Header:\n");
-
 	printf("  Magic:   ");
 	for (i = 0; i < EI_NIDENT; i++)
 	{
@@ -110,7 +137,10 @@ int main(int ac, char **av)
 			printf(" ");
 	}
 	printf("\n");
+}
 
+static void print_class(int cls)
+{
 	printf("  Class:                             ");
 	if (cls == ELFCLASS32)
 		printf("ELF32\n");
@@ -118,23 +148,32 @@ int main(int ac, char **av)
 		printf("ELF64\n");
 	else
 		printf("<unknown: %x>\n", cls);
+}
 
+static void print_data(int data_enc)
+{
 	printf("  Data:                              ");
-	if (id[EI_DATA] == ELFDATA2LSB)
+	if (data_enc == ELFDATA2LSB)
 		printf("2's complement, little endian\n");
-	else if (id[EI_DATA] == ELFDATA2MSB)
+	else if (data_enc == ELFDATA2MSB)
 		printf("2's complement, big endian\n");
 	else
-		printf("<unknown: %x>\n", id[EI_DATA]);
+		printf("<unknown: %x>\n", data_enc);
+}
 
+static void print_version(int ver)
+{
 	printf("  Version:                           ");
-	if (id[EI_VERSION] == EV_CURRENT)
+	if (ver == EV_CURRENT)
 		printf("1 (current)\n");
 	else
-		printf("%d\n", id[EI_VERSION]);
+		printf("%d\n", ver);
+}
 
+static void print_osabi(int osabi)
+{
 	printf("  OS/ABI:                            ");
-	switch (id[EI_OSABI])
+	switch (osabi)
 	{
 	case ELFOSABI_SYSV: printf("UNIX - System V\n"); break;
 	case ELFOSABI_HPUX: printf("UNIX - HP-UX\n"); break;
@@ -146,11 +185,17 @@ int main(int ac, char **av)
 	case ELFOSABI_TRU64: printf("UNIX - TRU64\n"); break;
 	case ELFOSABI_ARM: printf("ARM\n"); break;
 	case ELFOSABI_STANDALONE: printf("Standalone App\n"); break;
-	default: printf("<unknown: %x>\n", id[EI_OSABI]); break;
+	default: printf("<unknown: %x>\n", osabi); break;
 	}
+}
 
-	printf("  ABI Version:                       %d\n", id[EI_ABIVERSION]);
+static void print_abiver(int abiv)
+{
+	printf("  ABI Version:                       %d\n", abiv);
+}
 
+static void print_type(unsigned short etype)
+{
 	printf("  Type:                              ");
 	switch (etype)
 	{
@@ -161,9 +206,43 @@ int main(int ac, char **av)
 	case ET_CORE: printf("CORE (Core file)\n"); break;
 	default:      printf("<unknown: %x>\n", etype); break;
 	}
+}
 
-	/* note: %lx works for both 32/64 on typical Linux (LP64 uses 64-bit unsigned long) */
+static void print_entry(unsigned long entry)
+{
 	printf("  Entry point address:               0x%lx\n", entry);
+}
+
+/* ------------ main (قصير) ------------ */
+int main(int ac, char **av)
+{
+	union ehdr_u eh;
+	unsigned char *id;
+	int cls, is_msb;
+	unsigned short etype;
+	unsigned long entry;
+
+	if (ac != 2)
+		die_usage();
+
+	read_header(av[1], &eh);
+
+	id = eh.e64.e_ident;
+	must_be_elf_or_die(av[1], id);
+
+	cls = id[EI_CLASS];
+	is_msb = (id[EI_DATA] == ELFDATA2MSB);
+
+	normalize_type_entry(&eh, cls, is_msb, &etype, &entry);
+
+	print_magic(id);
+	print_class(cls);
+	print_data(id[EI_DATA]);
+	print_version(id[EI_VERSION]);
+	print_osabi(id[EI_OSABI]);
+	print_abiver(id[EI_ABIVERSION]);
+	print_type(etype);
+	print_entry(entry);
 
 	return (0);
 }
