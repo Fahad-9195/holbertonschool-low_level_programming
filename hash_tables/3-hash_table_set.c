@@ -42,7 +42,8 @@ static hash_node_t *node_create(const char *key, const char *value)
  *
  * Return: 1 if updated, 0 if not found, -1 on failure
  */
-static int update_if_exists(hash_node_t *head, const char *key, const char *value)
+static int update_if_exists(hash_node_t *head, const char *key,
+			    const char *value)
 {
 	char *vdup;
 
